@@ -1,0 +1,8 @@
+pandas
+requests
+apache-airflow apache-airflow-providers-microsoft-azure 
+pyarrow 
+azure-identity 
+azure-keyvault-secrets
+apache-airflow-providers-dbcloud
+apache-airflow-providers-snowflake
