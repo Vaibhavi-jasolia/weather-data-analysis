@@ -1,11 +1,12 @@
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from airflow.providers.microsoft.azure.transfers.local_to_adls import LocalToADLSOperator
+from airflow.providers.microsoft.azure.transfers.local_to_blob import LocalToAzureBlobOperator
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from datetime import datetime, timedelta
 import pandas as pd
 import requests
+import json
 import os
 
 # Default arguments for the DAG
@@ -23,19 +24,13 @@ dag = DAG('openweather_to_azure_blob',
           schedule_interval='@hourly',
           catchup=False)
 
+# Load locations from a JSON file
+def load_locations(filename='locations.json'):
+    with open(filename, 'r') as file:
+        return json.load(file)
+
 # List of coordinates (latitude, longitude) to retrieve weather data for
-locations = [
-    {"lat": "54.6778816", "lon": "-5.9249199"},
-    {"lat": "52.6362", "lon": "-1.1331969"},
-    {"lat": "51.456659", "lon": "-0.9696512"},
-    {"lat": "54.1775283", "lon": "-6.337506"},
-    {"lat": "51.4867", "lon": "0.2433"},
-    {"lat": "53.4071991", "lon": "-2.99168"},
-    {"lat": "53.3045372", "lon": "-1.1028469453936067"},
-    {"lat": "55.9007", "lon": "-3.5181"},
-    {"lat": "53.5227681", "lon": "-1.1335312"},
-    {"lat": "52.802742", "lon": "-1.629917"},
-]
+locations = load_locations()
 
 # Azure Key Vault details
 key_vault_name = "$(key-vault-name)"
@@ -58,7 +53,7 @@ azure_blob_storage_connection_string = get_secret("azure-blob-storage-connection
 def extract_weather_data(**kwargs):
     weather_data = []
     for loc in locations:
-        response = requests.get("https://api.openweathermap.org/data/2.5/onecall", params={
+        response = requests.get("https://api.openweathermap.org/data/2.5/weather", params={
             "lat": loc['lat'],
             "lon": loc['lon'],
             "appid": api_key,
@@ -91,12 +86,12 @@ extract_data = PythonOperator(
 )
 
 # Define the task to upload to Azure Blob Storage
-upload_to_azure_blob = LocalToADLSOperator(
+upload_to_azure_blob = LocalToAzureBlobOperator(
     task_id='upload_to_azure_blob',
-    src_file="{{ ti.xcom_pull(key='file_path') }}",
-    dest_path='weather_data/{{ ds }}/{{ execution_date.strftime("%Y%m%d%H%M%S") }}.parquet',
-    container_name='weather-data',  
-    azure_data_lake_conn_id='azure_blob_default',  
+    src_file="{{ ti.xcom_pull(task_ids='extract_weather_data', key='file_path') }}",
+    dest_blob='weather_data/{{ ds }}/{{ execution_date.strftime("%Y%m%d%H%M%S") }}.parquet',
+    container_name='weather-data',
+    azure_blob_storage_conn_id='azure_blob_default',
     dag=dag
 )
 
