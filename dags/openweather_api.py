@@ -33,7 +33,7 @@ def load_locations(filename='locations.json'):
 locations = load_locations()
 
 # Azure Key Vault details
-key_vault_name = "$(key-vault-name)"
+key_vault_name = "$(weather-data-analysis)"
 key_vault_uri = f"https://{key_vault_name}.vault.azure.net"
 
 # Retrieve secrets from Azure Key Vault
